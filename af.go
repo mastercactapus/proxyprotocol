@@ -1,7 +1,6 @@
 package proxyprotocol
 
 // AF represents an address family in protocol version 2.
-// https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt
 type AF byte
 
 const (

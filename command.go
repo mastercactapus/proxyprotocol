@@ -1,7 +1,6 @@
 package proxyprotocol
 
 // Command indicates the PROXY command being used.
-// https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt
 type Command byte
 
 const (

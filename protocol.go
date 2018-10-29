@@ -1,7 +1,6 @@
 package proxyprotocol
 
 // Proto indicates the used transport protocol.
-// https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt
 type Proto byte
 
 const (
