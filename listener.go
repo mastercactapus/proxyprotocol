@@ -80,8 +80,11 @@ func (l *Listener) AddRules(rules []Rule) {
 	}
 	// sort most-specific first
 	sort.Slice(l.rules, func(i, j int) bool {
-		iOnes, _ := l.rules[i].Subnet.Mask.Size()
-		jOnes, _ := l.rules[j].Subnet.Mask.Size()
+		iOnes, iBits := l.rules[i].Subnet.Mask.Size()
+		jOnes, jBits := l.rules[j].Subnet.Mask.Size()
+		if iOnes == jOnes {
+			return iBits > jBits
+		}
 		return iOnes > jOnes
 	})
 }
