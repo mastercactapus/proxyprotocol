@@ -3,6 +3,7 @@ package proxyprotocol
 import (
 	"net"
 	"sort"
+	"sync"
 	"time"
 )
 
@@ -10,18 +11,21 @@ import (
 type Listener struct {
 	net.Listener
 
-	rules []*Rule
-	index map[string]*Rule
+	filter []Rule
+	t      time.Duration
+
+	mx sync.RWMutex
 }
 
-// NewListener will wrap nl, automatically handling PROXY headers for any matching Rule.
-func NewListener(nl net.Listener, rules []Rule) *Listener {
+// NewListener will wrap nl, automatically handling PROXY headers for all connections.
+// To only require PROXY headers from certain connections, use SetFilter.
+//
+// By default, all connections must provide a PROXY header within the provided timeout.
+func NewListener(nl net.Listener, t time.Duration) *Listener {
 	l := &Listener{
 		Listener: nl,
-		index:    make(map[string]*Rule, len(rules)),
-		rules:    make([]*Rule, 0, len(rules)),
+		t:        t,
 	}
-	l.AddRules(rules)
 	return l
 }
 
@@ -41,7 +45,16 @@ func (l *Listener) Accept() (net.Conn, error) {
 	default:
 		return c, nil
 	}
-	for _, n := range l.rules {
+
+	l.mx.RLock()
+	filter := l.filter
+	t := l.t
+	l.mx.RUnlock()
+
+	if len(filter) == 0 {
+		return NewConn(c, time.Now().Add(t)), nil
+	}
+	for _, n := range filter {
 		if n.Subnet.Contains(remoteIP) {
 			if n.Timeout == 0 {
 				return NewConn(c, time.Time{}), nil
@@ -52,29 +65,71 @@ func (l *Listener) Accept() (net.Conn, error) {
 	return c, nil
 }
 
-// AddRules will merge the provides rules to the listener. Rules are matched most-specific first.
-// If 2 rules have the same subnet, the lower timeout is used and the rules are merged.
-func (l *Listener) AddRules(rules []Rule) {
-	for _, n := range rules {
-		name := n.Subnet.String()
-		if s, ok := l.index[name]; ok {
-			if n.Timeout > 0 && n.Timeout < s.Timeout {
-				s.Timeout = n.Timeout
-			}
-			continue
-		}
+// SetDefaultTimeout sets the default timeout, used when the subnet filter is nil.
+//
+// SetDefaultTimeout is safe to call from multiple goroutines while the listener is in use.
+func (l *Listener) SetDefaultTimeout(t time.Duration) {
+	l.mx.Lock()
+	l.t = t
+	l.mx.Unlock()
+}
 
-		cpy := n
-		l.index[name] = &cpy
-		l.rules = append(l.rules, &cpy)
-	}
-	// sort most-specific first
-	sort.Slice(l.rules, func(i, j int) bool {
-		iOnes, iBits := l.rules[i].Subnet.Mask.Size()
-		jOnes, jBits := l.rules[j].Subnet.Mask.Size()
-		if iOnes == jOnes {
+// Filter returns the current set of filter rules.
+//
+// Filter is safe to call from multiple goroutines while the listener is in use.
+func (l *Listener) Filter() []Rule {
+	l.mx.RLock()
+	filter := l.filter
+	l.mx.RUnlock()
+	f := make([]Rule, len(filter))
+	copy(f, filter)
+	return f
+}
+
+// SetFilter allows limiting PROXY header parsing to matching Subnets with an optional timeout.
+// If filter is nil, all connections will be required to provide a PROXY header.
+//
+// Connections not matching any rule will be returned from Accept from the underlying listener
+// directly without reading a PROXY header.
+//
+// Duplicate subnet rules will automatically be removed and the lowest non-zero timeout will be used.
+//
+// SetFilter is safe to call from multiple goroutines while the listener is in use.
+func (l *Listener) SetFilter(filter []Rule) {
+	newFilter := make([]Rule, len(filter))
+	copy(newFilter, filter)
+	sort.Slice(newFilter, func(i, j int) bool {
+		iOnes, iBits := newFilter[i].Subnet.Mask.Size()
+		jOnes, jBits := newFilter[j].Subnet.Mask.Size()
+		if iOnes != jOnes {
+			return iOnes > jOnes
+		}
+		if iBits != jBits {
 			return iBits > jBits
 		}
-		return iOnes > jOnes
+		if newFilter[i].Timeout != newFilter[j].Timeout {
+			if newFilter[j].Timeout == 0 {
+				return true
+			}
+			return newFilter[i].Timeout < newFilter[j].Timeout
+		}
+		return newFilter[i].Timeout < newFilter[j].Timeout
 	})
+	if len(newFilter) > 0 {
+		// dedup
+		last := newFilter[0]
+		nf := newFilter[1:1]
+		for _, f := range newFilter[1:] {
+			if last.Subnet.String() == f.Subnet.String() {
+				continue
+			}
+
+			last = f
+			nf = append(nf, f)
+		}
+	}
+
+	l.mx.Lock()
+	l.filter = newFilter
+	l.mx.Unlock()
 }
