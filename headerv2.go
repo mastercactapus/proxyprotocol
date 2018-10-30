@@ -68,6 +68,8 @@ func parseV2(r *bufio.Reader) (Header, error) {
 		newBuf := make([]byte, 16+int(rawHdr.Len))
 		copy(newBuf, buf)
 		buf = newBuf
+	} else {
+		buf = buf[:16+int(rawHdr.Len)]
 	}
 
 	n, err = io.ReadFull(r, buf[16:])
