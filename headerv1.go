@@ -108,6 +108,15 @@ func (h HeaderV1) Dest() net.Addr { return &net.TCPAddr{IP: h.DestIP, Port: h.De
 
 // WriteTo will write the V1 header to w.
 func (h HeaderV1) WriteTo(w io.Writer) (int64, error) {
+	if h.Family == "" {
+		if h.SourceIP.To4() != nil {
+			h.Family = V1ProtoFamTCP4
+		} else if h.SourceIP.To16() != nil {
+			h.Family = V1ProtoFamTCP6
+		} else {
+			h.Family = V1ProtoFamUnknown
+		}
+	}
 	n, err := fmt.Fprintf(w, "PROXY %s %s %s %d %d\r\n",
 		h.Family,
 		h.SourceIP.String(),

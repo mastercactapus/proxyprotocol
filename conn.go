@@ -49,8 +49,8 @@ func (c *Conn) parse() {
 		return
 	}
 
-	c.local = c.hdr.Source()
-	c.remote = c.hdr.Dest()
+	c.local = c.hdr.Dest()
+	c.remote = c.hdr.Source()
 }
 
 // SetDeadline calls SetDeadline on the underlying net.Conn.
