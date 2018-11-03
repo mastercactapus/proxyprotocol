@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -64,9 +65,10 @@ func parseV2(r *bufio.Reader) (Header, error) {
 		return nil, &InvalidHeaderErr{Read: buf[:16], error: errors.New("invalid v2 transport protocol")}
 	}
 
-	if int(rawHdr.Len) > len(buf) {
+	fmt.Println("LEN", len(buf), rawHdr.Len)
+	if 16+int(rawHdr.Len) > len(buf) {
 		newBuf := make([]byte, 16+int(rawHdr.Len))
-		copy(newBuf, buf)
+		copy(newBuf, buf[:16])
 		buf = newBuf
 	} else {
 		buf = buf[:16+int(rawHdr.Len)]

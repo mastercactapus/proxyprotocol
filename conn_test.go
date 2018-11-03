@@ -10,25 +10,40 @@ import (
 )
 
 func TestConn_ProxyHeader(t *testing.T) {
-	t.Run("V1", func(t *testing.T) {
-		hdr := &HeaderV1{
-			SourcePort: 1234,
-			DestPort:   5678,
-			Family:     V1ProtoFamTCP4,
-			SourceIP:   net.ParseIP("192.168.0.1"),
-			DestIP:     net.ParseIP("192.168.0.2"),
-		}
+	check := func(name string, hdr Header) {
+		t.Run(name, func(t *testing.T) {
+			src, dst := net.Pipe()
+			defer src.Close()
+			defer dst.Close()
+			dstC := NewConn(dst, time.Now().Add(time.Second))
+			go hdr.WriteTo(src)
 
-		src, dst := net.Pipe()
-		defer src.Close()
-		defer dst.Close()
-		dstC := NewConn(dst, time.Time{})
-		go hdr.WriteTo(src)
-
-		hdrOut, err := dstC.ProxyHeader()
-		assert.NoError(t, err)
-		assert.Equal(t, hdr, hdrOut)
+			hdrOut, err := dstC.ProxyHeader()
+			assert.NoError(t, err)
+			assert.Equal(t, hdr, hdrOut)
+		})
+	}
+	check("V1-IPv4", &HeaderV1{
+		SourcePort: 1234,
+		DestPort:   5678,
+		SourceIP:   net.ParseIP("192.168.0.1"),
+		DestIP:     net.ParseIP("192.168.0.2"),
 	})
+	check("V1-IPv6", &HeaderV1{
+		SourcePort: 1234,
+		DestPort:   5678,
+		SourceIP:   net.ParseIP("2001:db8:85a3::8a2e:370:7334"),
+		DestIP:     net.ParseIP("2002:db8:85a3::8a2e:370:7334"),
+	})
+
+	check("V2", &HeaderV2{
+		Command:    CommandProxy,
+		Family:     AddrFamilyInet,
+		Protocol:   ProtoStream,
+		SourceAddr: &net.TCPAddr{Port: 1234, IP: net.ParseIP("192.168.0.1")},
+		DestAddr:   &net.TCPAddr{Port: 5678, IP: net.ParseIP("192.168.0.2")},
+	})
+
 }
 
 func TestNewConnV1(t *testing.T) {

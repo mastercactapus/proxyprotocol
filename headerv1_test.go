@@ -18,7 +18,7 @@ func TestHeaderV1_WriteTo(t *testing.T) {
 		})
 	}
 
-	check("blank", HeaderV1{}, "PROXY UNKNOWN <nil> <nil> 0 0\r\n")
+	check("blank", HeaderV1{}, "PROXY UNKNOWN\r\n")
 	check("ipv4", HeaderV1{
 		SourcePort: 1234,
 		DestPort:   5678,
@@ -27,14 +27,13 @@ func TestHeaderV1_WriteTo(t *testing.T) {
 	},
 		"PROXY TCP4 192.168.0.1 192.168.0.2 1234 5678\r\n",
 	)
-	check("ipv4-fam-override", HeaderV1{
+	check("ipv4-6-mismatch", HeaderV1{
 		SourcePort: 1234,
 		DestPort:   5678,
-		Family:     V1ProtoFamUnknown,
-		SourceIP:   net.ParseIP("192.168.0.1"),
+		SourceIP:   net.ParseIP("2001:db8:85a3::8a2e:370:7334"),
 		DestIP:     net.ParseIP("192.168.0.2"),
 	},
-		"PROXY UNKNOWN 192.168.0.1 192.168.0.2 1234 5678\r\n",
+		"PROXY UNKNOWN\r\n",
 	)
 	check("ipv6", HeaderV1{
 		SourcePort: 1234,

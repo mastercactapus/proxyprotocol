@@ -2,6 +2,7 @@ package proxyprotocol
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -10,7 +11,6 @@ import (
 
 // HeaderV1 contains information relayed by the PROXY protocol version 1 (human-readable) header.
 type HeaderV1 struct {
-	Family     V1ProtoFam
 	SourcePort int
 	SourceIP   net.IP
 	DestPort   int
@@ -19,20 +19,30 @@ type HeaderV1 struct {
 
 func parseV1(r *bufio.Reader) (*HeaderV1, error) {
 	buf := make([]byte, 0, 108)
+	last := byte(0)
 	for {
 		b, err := r.ReadByte()
 		if err != nil {
 			return nil, &InvalidHeaderErr{Read: buf, error: err}
 		}
 		buf = append(buf, b)
-		if b == '\n' {
+		if last == '\r' && b == '\n' {
 			break
 		}
 		if len(buf) == 108 {
 			return nil, &InvalidHeaderErr{Read: buf, error: errors.New("header too long")}
 		}
+		last = b
 	}
-	var fam V1ProtoFam
+	if bytes.HasPrefix(buf, []byte("PROXY UNKNOWN")) {
+		// From the documentation:
+		//
+		// For "UNKNOWN", the rest of the line before the
+		// CRLF may be omitted by the sender, and the receiver must ignore anything
+		// presented before the CRLF is found.
+		return &HeaderV1{}, nil
+	}
+	var fam string
 	var srcIPStr, dstIPStr string
 	var srcPort, dstPort int
 	n, err := fmt.Sscanf(string(buf), string(sigV1), &fam, &srcIPStr, &dstIPStr, &srcPort, &dstPort)
@@ -40,28 +50,42 @@ func parseV1(r *bufio.Reader) (*HeaderV1, error) {
 		return nil, &InvalidHeaderErr{Read: buf, error: err}
 	}
 	switch fam {
-	case V1ProtoFamUnknown:
-		return &HeaderV1{Family: fam}, nil
-	case V1ProtoFamTCP4, V1ProtoFamTCP6:
-		// couldn't parse IP/port
+	case "TCP4", "TCP6":
 		if err != nil {
+			// couldn't parse IP/port
 			return nil, &InvalidHeaderErr{Read: buf, error: err}
 		}
 	default:
-		return nil, &InvalidHeaderErr{Read: buf, error: errors.New("unsupported INET protocol/family")}
+		return nil, &InvalidHeaderErr{Read: buf, error: errors.New("unsupported INET protocol/family value")}
+	}
+
+	if srcPort < 0 || srcPort > 65535 {
+		return nil, &InvalidHeaderErr{Read: buf, error: errors.New("invalid source port")}
+	}
+	if dstPort < 0 || dstPort > 65535 {
+		return nil, &InvalidHeaderErr{Read: buf, error: errors.New("invalid destination port")}
+	}
+
+	validAddr := func(ip net.IP) bool {
+		if ip == nil {
+			return false
+		}
+		if fam == "TCP4" {
+			return ip.To4() != nil
+		}
+		return ip.To4() == nil
 	}
 
 	srcIP := net.ParseIP(srcIPStr)
-	if srcIP == nil {
+	if !validAddr(srcIP) {
 		return nil, &InvalidHeaderErr{Read: buf, error: errors.New("invalid source address")}
 	}
 	dstIP := net.ParseIP(dstIPStr)
-	if dstIP == nil {
+	if !validAddr(dstIP) {
 		return nil, &InvalidHeaderErr{Read: buf, error: errors.New("invalid destination address")}
 	}
 
 	return &HeaderV1{
-		Family:     fam,
 		SourceIP:   srcIP,
 		DestIP:     dstIP,
 		SourcePort: srcPort,
@@ -70,31 +94,35 @@ func parseV1(r *bufio.Reader) (*HeaderV1, error) {
 }
 
 // FromConn will populate header data from the given net.Conn.
-// It is assumed the connection is incomming, and the header is set to proxy
-// details forward.
 //
-// Specifically, the RemoteAddr of the Conn will be considered the Source address/port
+// The RemoteAddr of the Conn will be considered the Source address/port
 // and the LocalAddr of the Conn will be considered the Destination address/port for
-// the purposes of the PROXY header.
-func (h *HeaderV1) FromConn(c net.Conn) error {
-	local, ok := c.LocalAddr().(*net.TCPAddr)
-	if !ok {
-		return errors.New("unsupported local address type")
+// the purposes of the PROXY header if outgoing is false, if outgoing is true, the
+// inverse is true.
+func (h *HeaderV1) FromConn(c net.Conn, outgoing bool) {
+	setIPPort := func(a *net.TCPAddr, ip *net.IP, port *int) {
+		if a == nil {
+			*ip = nil
+			*port = 0
+		} else {
+			*ip = a.IP
+			*port = a.Port
+		}
 	}
-	remote, ok := c.RemoteAddr().(*net.TCPAddr)
-	if !ok {
-		return errors.New("unsupported remote address type")
-	}
-	if remote.IP.To4() != nil {
-		h.Family = V1ProtoFamTCP4
+
+	rem, _ := c.RemoteAddr().(*net.TCPAddr)
+	if outgoing {
+		setIPPort(rem, &h.DestIP, &h.DestPort)
 	} else {
-		h.Family = V1ProtoFamTCP6
+		setIPPort(rem, &h.SourceIP, &h.SourcePort)
 	}
-	h.SourceIP = remote.IP
-	h.SourcePort = remote.Port
-	h.DestIP = local.IP
-	h.DestPort = local.Port
-	return nil
+
+	local, _ := c.LocalAddr().(*net.TCPAddr)
+	if outgoing {
+		setIPPort(local, &h.SourceIP, &h.SourcePort)
+	} else {
+		setIPPort(local, &h.DestIP, &h.DestPort)
+	}
 }
 
 // Version always returns 1.
@@ -106,23 +134,39 @@ func (h HeaderV1) Source() net.Addr { return &net.TCPAddr{IP: h.SourceIP, Port: 
 // Dest returns the TCP destination address.
 func (h HeaderV1) Dest() net.Addr { return &net.TCPAddr{IP: h.DestIP, Port: h.DestPort} }
 
-// WriteTo will write the V1 header to w.
-func (h HeaderV1) WriteTo(w io.Writer) (int64, error) {
-	if h.Family == "" {
-		if h.SourceIP.To4() != nil {
-			h.Family = V1ProtoFamTCP4
-		} else if h.SourceIP.To16() != nil {
-			h.Family = V1ProtoFamTCP6
-		} else {
-			h.Family = V1ProtoFamUnknown
+// ProtoFamily will return the protocol & family value for the current configuration.
+//
+// Possible values are: TCP4, TCP6, or UNKNOWN
+func (h HeaderV1) ProtoFamily() string {
+	if h.DestPort >= 0 && h.DestPort <= 65535 && h.SourcePort >= 0 && h.SourcePort <= 65535 {
+		src4 := h.SourceIP.To4() != nil
+		dst4 := h.DestIP.To4() != nil
+		if src4 && dst4 {
+			return "TCP4"
+		} else if !src4 && !dst4 && h.SourceIP.To16() != nil && h.DestIP.To16() != nil {
+			return "TCP6"
 		}
 	}
-	n, err := fmt.Fprintf(w, "PROXY %s %s %s %d %d\r\n",
-		h.Family,
-		h.SourceIP.String(),
-		h.DestIP.String(),
-		h.SourcePort,
-		h.DestPort,
-	)
+	return "UNKNOWN"
+}
+
+// WriteTo will write the V1 header to w. The proto/fam will be set to UNKNOWN
+// if source and dest IPs are of mismatched types, or any port is out of bounds.
+func (h HeaderV1) WriteTo(w io.Writer) (int64, error) {
+	var n int
+	var err error
+	fam := h.ProtoFamily()
+	if fam == "UNKNOWN" {
+		n, err = io.WriteString(w, "PROXY UNKNOWN\r\n")
+	} else {
+		n, err = fmt.Fprintf(w, "PROXY %s %s %s %d %d\r\n",
+			fam,
+			h.SourceIP.String(),
+			h.DestIP.String(),
+			h.SourcePort,
+			h.DestPort,
+		)
+	}
+
 	return int64(n), err
 }
