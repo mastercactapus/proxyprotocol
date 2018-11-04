@@ -37,17 +37,17 @@ func TestHeaderV2(t *testing.T) {
 			assert.IsType(t, &HeaderV2{}, hdr, "Header Type")
 			p := hdr.(*HeaderV2)
 			assert.Equal(t, h.Command, p.Command, "Command")
-			if h.SourceAddr != nil {
-				assert.NotNil(t, p.SourceAddr)
-				assert.Equal(t, h.SourceAddr.String(), p.SourceAddr.String(), "SrcAddr")
+			if h.Src != nil {
+				assert.NotNil(t, p.Src)
+				assert.Equal(t, h.Src.String(), p.Src.String(), "SrcAddr")
 			} else {
-				assert.Nil(t, p.SourceAddr)
+				assert.Nil(t, p.Src)
 			}
-			if h.DestAddr != nil {
-				assert.NotNil(t, p.DestAddr)
-				assert.Equal(t, h.DestAddr.String(), p.DestAddr.String(), "DestAddr")
+			if h.Dest != nil {
+				assert.NotNil(t, p.Dest)
+				assert.Equal(t, h.Dest.String(), p.Dest.String(), "DestAddr")
 			} else {
-				assert.Nil(t, p.DestAddr)
+				assert.Nil(t, p.Dest)
 			}
 		})
 	}
@@ -62,9 +62,9 @@ func TestHeaderV2(t *testing.T) {
 	)
 
 	check("tcp-ipv4", HeaderV2{
-		Command:    CommandProxy,
-		SourceAddr: &net.TCPAddr{IP: net.ParseIP("192.168.0.1"), Port: 80},
-		DestAddr:   &net.TCPAddr{IP: net.ParseIP("192.168.0.2"), Port: 90},
+		Command: CmdProxy,
+		Src:     &net.TCPAddr{IP: net.ParseIP("192.168.0.1"), Port: 80},
+		Dest:    &net.TCPAddr{IP: net.ParseIP("192.168.0.2"), Port: 90},
 	},
 		[]section{
 			{name: "Signature", value: sigV2},
@@ -81,9 +81,9 @@ func TestHeaderV2(t *testing.T) {
 	)
 
 	check("udp-ipv4", HeaderV2{
-		Command:    CommandProxy,
-		SourceAddr: &net.UDPAddr{IP: net.ParseIP("192.168.0.1"), Port: 80},
-		DestAddr:   &net.UDPAddr{IP: net.ParseIP("192.168.0.2"), Port: 90},
+		Command: CmdProxy,
+		Src:     &net.UDPAddr{IP: net.ParseIP("192.168.0.1"), Port: 80},
+		Dest:    &net.UDPAddr{IP: net.ParseIP("192.168.0.2"), Port: 90},
 	},
 		[]section{
 			{name: "Signature", value: sigV2},
@@ -100,9 +100,9 @@ func TestHeaderV2(t *testing.T) {
 	)
 
 	check("udp-ipv6", HeaderV2{
-		Command:    CommandProxy,
-		SourceAddr: &net.UDPAddr{IP: net.ParseIP("2001::1"), Port: 80},
-		DestAddr:   &net.UDPAddr{IP: net.ParseIP("2002::2"), Port: 90},
+		Command: CmdProxy,
+		Src:     &net.UDPAddr{IP: net.ParseIP("2001::1"), Port: 80},
+		Dest:    &net.UDPAddr{IP: net.ParseIP("2002::2"), Port: 90},
 	},
 		[]section{
 			{name: "Signature", value: sigV2},
@@ -119,9 +119,9 @@ func TestHeaderV2(t *testing.T) {
 	)
 
 	check("unixstream", HeaderV2{
-		Command:    CommandProxy,
-		SourceAddr: &net.UnixAddr{Net: "unix", Name: "foo"},
-		DestAddr:   &net.UnixAddr{Net: "unix", Name: "bar"},
+		Command: CmdProxy,
+		Src:     &net.UnixAddr{Net: "unix", Name: "foo"},
+		Dest:    &net.UnixAddr{Net: "unix", Name: "bar"},
 	},
 		[]section{
 			{name: "Signature", value: sigV2},
@@ -135,9 +135,9 @@ func TestHeaderV2(t *testing.T) {
 	)
 
 	check("unixgram", HeaderV2{
-		Command:    CommandProxy,
-		SourceAddr: &net.UnixAddr{Net: "unixgram", Name: "foo"},
-		DestAddr:   &net.UnixAddr{Net: "unixgram", Name: "bar"},
+		Command: CmdProxy,
+		Src:     &net.UnixAddr{Net: "unixgram", Name: "foo"},
+		Dest:    &net.UnixAddr{Net: "unixgram", Name: "bar"},
 	},
 		[]section{
 			{name: "Signature", value: sigV2},

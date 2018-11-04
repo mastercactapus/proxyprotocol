@@ -12,9 +12,9 @@ import (
 
 // HeaderV2 contains information relayed by the PROXY protocol version 2 (binary) header.
 type HeaderV2 struct {
-	Command    Command
-	SourceAddr net.Addr
-	DestAddr   net.Addr
+	Command Cmd
+	Src     net.Addr
+	Dest    net.Addr
 }
 
 type rawV2 struct {
@@ -44,8 +44,8 @@ func parseV2(r *bufio.Reader) (*HeaderV2, error) {
 	}
 	var h HeaderV2
 	// lowest 4 = command (0xf == 0b00001111)
-	h.Command = Command(rawHdr.VerCmd & 0xf)
-	if h.Command > CommandProxy {
+	h.Command = Cmd(rawHdr.VerCmd & 0xf)
+	if h.Command > CmdProxy {
 		return nil, &InvalidHeaderErr{Read: buf[:16], error: errors.New("invalid v2 command")}
 	}
 
@@ -72,63 +72,63 @@ func parseV2(r *bufio.Reader) (*HeaderV2, error) {
 		return nil, &InvalidHeaderErr{Read: buf[:16+n], error: err}
 	}
 
-	if h.Command == CommandLocal {
+	if h.Command == CmdLocal {
 		// ignore address information for local
 		return &h, nil
 	}
 
 	switch rawHdr.FamProto {
 	case 0x11: // TCP over IPv4
-		h.SourceAddr = &net.TCPAddr{
+		h.Src = &net.TCPAddr{
 			IP:   net.IP(buf[16:20]),
 			Port: int(binary.BigEndian.Uint16(buf[24:])),
 		}
-		h.DestAddr = &net.TCPAddr{
+		h.Dest = &net.TCPAddr{
 			IP:   net.IP(buf[20:24]),
 			Port: int(binary.BigEndian.Uint16(buf[26:])),
 		}
 	case 0x12: // UDP over IPv4
-		h.SourceAddr = &net.UDPAddr{
+		h.Src = &net.UDPAddr{
 			IP:   net.IP(buf[16:20]),
 			Port: int(binary.BigEndian.Uint16(buf[24:])),
 		}
-		h.DestAddr = &net.UDPAddr{
+		h.Dest = &net.UDPAddr{
 			IP:   net.IP(buf[20:24]),
 			Port: int(binary.BigEndian.Uint16(buf[26:])),
 		}
 	case 0x21: // TCP over IPv6
-		h.SourceAddr = &net.TCPAddr{
+		h.Src = &net.TCPAddr{
 			IP:   net.IP(buf[16:32]),
 			Port: int(binary.BigEndian.Uint16(buf[48:])),
 		}
-		h.DestAddr = &net.TCPAddr{
+		h.Dest = &net.TCPAddr{
 			IP:   net.IP(buf[32:48]),
 			Port: int(binary.BigEndian.Uint16(buf[50:])),
 		}
 	case 0x22: // UDP over IPv6
-		h.SourceAddr = &net.UDPAddr{
+		h.Src = &net.UDPAddr{
 			IP:   net.IP(buf[16:32]),
 			Port: int(binary.BigEndian.Uint16(buf[48:])),
 		}
-		h.DestAddr = &net.UDPAddr{
+		h.Dest = &net.UDPAddr{
 			IP:   net.IP(buf[32:48]),
 			Port: int(binary.BigEndian.Uint16(buf[50:])),
 		}
 	case 0x31: // UNIX stream
-		h.SourceAddr = &net.UnixAddr{
+		h.Src = &net.UnixAddr{
 			Net:  "unix",
 			Name: strings.TrimRight(string(buf[16:124]), "\x00"),
 		}
-		h.DestAddr = &net.UnixAddr{
+		h.Dest = &net.UnixAddr{
 			Net:  "unix",
 			Name: strings.TrimRight(string(buf[124:232]), "\x00"),
 		}
 	case 0x32: // UNIX datagram
-		h.SourceAddr = &net.UnixAddr{
+		h.Src = &net.UnixAddr{
 			Net:  "unixgram",
 			Name: strings.TrimRight(string(buf[16:124]), "\x00"),
 		}
-		h.DestAddr = &net.UnixAddr{
+		h.Dest = &net.UnixAddr{
 			Net:  "unixgram",
 			Name: strings.TrimRight(string(buf[124:232]), "\x00"),
 		}
@@ -144,29 +144,29 @@ func parseV2(r *bufio.Reader) (*HeaderV2, error) {
 // the purposes of the PROXY header if outgoing is false, if outgoing is true, the
 // inverse is true.
 func (h *HeaderV2) FromConn(c net.Conn, outgoing bool) {
-	h.Command = CommandProxy
+	h.Command = CmdProxy
 	if outgoing {
-		h.SourceAddr = c.LocalAddr()
-		h.DestAddr = c.RemoteAddr()
+		h.Src = c.LocalAddr()
+		h.Dest = c.RemoteAddr()
 	} else {
-		h.SourceAddr = c.RemoteAddr()
-		h.DestAddr = c.LocalAddr()
+		h.Src = c.RemoteAddr()
+		h.Dest = c.LocalAddr()
 	}
 }
 
 // Version always returns 2.
 func (HeaderV2) Version() int { return 2 }
 
-// Source returns the source address as TCP, UDP, Unix, or nil depending on Protocol and Family.
-func (h HeaderV2) Source() net.Addr { return h.SourceAddr }
+// SrcAddr returns the source address as TCP, UDP, Unix, or nil depending on Protocol and Family.
+func (h HeaderV2) SrcAddr() net.Addr { return h.Src }
 
-// Dest returns the destination address as TCP, UDP, Unix, or nil depending on Protocol and Family.
-func (h HeaderV2) Dest() net.Addr { return h.DestAddr }
+// DestAddr returns the destination address as TCP, UDP, Unix, or nil depending on Protocol and Family.
+func (h HeaderV2) DestAddr() net.Addr { return h.Dest }
 
 // WriteTo will write the V2 header to w. Command must be CommandProxy
 // to send any address data.
 func (h HeaderV2) WriteTo(w io.Writer) (int64, error) {
-	if h.Command > CommandProxy {
+	if h.Command > CmdProxy {
 		return 0, errors.New("invalid command")
 	}
 
@@ -180,7 +180,7 @@ func (h HeaderV2) WriteTo(w io.Writer) (int64, error) {
 		}
 		return 16, nil
 	}
-	if h.Command == CommandLocal {
+	if h.Command == CmdLocal {
 		return sendEmpty()
 	}
 
@@ -208,9 +208,9 @@ func (h HeaderV2) WriteTo(w io.Writer) (int64, error) {
 		return fam
 	}
 
-	switch src := h.SourceAddr.(type) {
+	switch src := h.Src.(type) {
 	case *net.TCPAddr:
-		dst, ok := h.DestAddr.(*net.TCPAddr)
+		dst, ok := h.Dest.(*net.TCPAddr)
 		if !ok {
 			return sendEmpty()
 		}
@@ -220,7 +220,7 @@ func (h HeaderV2) WriteTo(w io.Writer) (int64, error) {
 		}
 		rawHdr.FamProto = (addrFam << 4) | 0x1 // 0x1 == STREAM
 	case *net.UDPAddr:
-		dst, ok := h.DestAddr.(*net.UDPAddr)
+		dst, ok := h.Dest.(*net.UDPAddr)
 		if !ok {
 			return sendEmpty()
 		}
@@ -230,7 +230,7 @@ func (h HeaderV2) WriteTo(w io.Writer) (int64, error) {
 		}
 		rawHdr.FamProto = (addrFam << 4) | 0x2 // 0x2 == DGRAM
 	case *net.UnixAddr:
-		dst, ok := h.DestAddr.(*net.UnixAddr)
+		dst, ok := h.Dest.(*net.UnixAddr)
 		if !ok || src.Net != dst.Net {
 			return sendEmpty()
 		}

@@ -1,12 +1,36 @@
 package proxyprotocol
 
 import (
+	"log"
 	"net"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func ExampleNewListener() {
+	nl, err := net.Listen("tcp", ":80")
+	if err != nil {
+		log.Println("ERROR: listen:", err)
+		return
+	}
+	defer nl.Close()
+
+	// Wrap listener with 3 second timeout for PROXY header
+	l := NewListener(nl, 3*time.Second)
+
+	for {
+		c, err := l.Accept()
+		if err != nil {
+			log.Println("ERROR: accept:", err)
+			return
+		}
+
+		// RemoteAddr will be the source address of the PROXY header
+		log.Println("New connection from:", c.RemoteAddr().String())
+	}
+}
 
 func TestListener_TCPV1(t *testing.T) {
 	nl, err := net.Listen("tcp", ":0")
@@ -26,10 +50,10 @@ func TestListener_TCPV1(t *testing.T) {
 		defer c.Close()
 
 		HeaderV1{
-			SourceIP:   net.ParseIP("192.168.0.1"),
-			DestIP:     net.ParseIP("192.168.0.2"),
-			SourcePort: 1234,
-			DestPort:   5678,
+			SrcIP:    net.ParseIP("192.168.0.1"),
+			DestIP:   net.ParseIP("192.168.0.2"),
+			SrcPort:  1234,
+			DestPort: 5678,
 		}.WriteTo(c)
 	}()
 	go func() {
@@ -71,9 +95,9 @@ func TestListener_TCPV2(t *testing.T) {
 		defer c.Close()
 
 		HeaderV2{
-			Command:    CommandProxy,
-			SourceAddr: &net.TCPAddr{IP: net.ParseIP("192.168.0.1"), Port: 1234},
-			DestAddr:   &net.TCPAddr{IP: net.ParseIP("192.168.0.2"), Port: 5678},
+			Command: CmdProxy,
+			Src:     &net.TCPAddr{IP: net.ParseIP("192.168.0.1"), Port: 1234},
+			Dest:    &net.TCPAddr{IP: net.ParseIP("192.168.0.2"), Port: 5678},
 		}.WriteTo(c)
 	}()
 	go func() {

@@ -11,10 +11,10 @@ import (
 
 // HeaderV1 contains information relayed by the PROXY protocol version 1 (human-readable) header.
 type HeaderV1 struct {
-	SourcePort int
-	SourceIP   net.IP
-	DestPort   int
-	DestIP     net.IP
+	SrcPort  int
+	SrcIP    net.IP
+	DestPort int
+	DestIP   net.IP
 }
 
 func parseV1(r *bufio.Reader) (*HeaderV1, error) {
@@ -86,10 +86,10 @@ func parseV1(r *bufio.Reader) (*HeaderV1, error) {
 	}
 
 	return &HeaderV1{
-		SourceIP:   srcIP,
-		DestIP:     dstIP,
-		SourcePort: srcPort,
-		DestPort:   dstPort,
+		SrcIP:    srcIP,
+		DestIP:   dstIP,
+		SrcPort:  srcPort,
+		DestPort: dstPort,
 	}, nil
 }
 
@@ -114,12 +114,12 @@ func (h *HeaderV1) FromConn(c net.Conn, outgoing bool) {
 	if outgoing {
 		setIPPort(rem, &h.DestIP, &h.DestPort)
 	} else {
-		setIPPort(rem, &h.SourceIP, &h.SourcePort)
+		setIPPort(rem, &h.SrcIP, &h.SrcPort)
 	}
 
 	local, _ := c.LocalAddr().(*net.TCPAddr)
 	if outgoing {
-		setIPPort(local, &h.SourceIP, &h.SourcePort)
+		setIPPort(local, &h.SrcIP, &h.SrcPort)
 	} else {
 		setIPPort(local, &h.DestIP, &h.DestPort)
 	}
@@ -128,22 +128,22 @@ func (h *HeaderV1) FromConn(c net.Conn, outgoing bool) {
 // Version always returns 1.
 func (HeaderV1) Version() int { return 1 }
 
-// Source returns the TCP source address.
-func (h HeaderV1) Source() net.Addr { return &net.TCPAddr{IP: h.SourceIP, Port: h.SourcePort} }
+// SrcAddr returns the TCP source address.
+func (h HeaderV1) SrcAddr() net.Addr { return &net.TCPAddr{IP: h.SrcIP, Port: h.SrcPort} }
 
-// Dest returns the TCP destination address.
-func (h HeaderV1) Dest() net.Addr { return &net.TCPAddr{IP: h.DestIP, Port: h.DestPort} }
+// DestAddr returns the TCP destination address.
+func (h HeaderV1) DestAddr() net.Addr { return &net.TCPAddr{IP: h.DestIP, Port: h.DestPort} }
 
-// ProtoFamily will return the protocol & family value for the current configuration.
+// protoFam will return the protocol & family value for the current configuration.
 //
 // Possible values are: TCP4, TCP6, or UNKNOWN
-func (h HeaderV1) ProtoFamily() string {
-	if h.DestPort >= 0 && h.DestPort <= 65535 && h.SourcePort >= 0 && h.SourcePort <= 65535 {
-		src4 := h.SourceIP.To4() != nil
+func (h HeaderV1) protoFam() string {
+	if h.DestPort >= 0 && h.DestPort <= 65535 && h.SrcPort >= 0 && h.SrcPort <= 65535 {
+		src4 := h.SrcIP.To4() != nil
 		dst4 := h.DestIP.To4() != nil
 		if src4 && dst4 {
 			return "TCP4"
-		} else if !src4 && !dst4 && h.SourceIP.To16() != nil && h.DestIP.To16() != nil {
+		} else if !src4 && !dst4 && h.SrcIP.To16() != nil && h.DestIP.To16() != nil {
 			return "TCP6"
 		}
 	}
@@ -155,15 +155,15 @@ func (h HeaderV1) ProtoFamily() string {
 func (h HeaderV1) WriteTo(w io.Writer) (int64, error) {
 	var n int
 	var err error
-	fam := h.ProtoFamily()
+	fam := h.protoFam()
 	if fam == "UNKNOWN" {
 		n, err = io.WriteString(w, "PROXY UNKNOWN\r\n")
 	} else {
 		n, err = fmt.Fprintf(w, "PROXY %s %s %s %d %d\r\n",
 			fam,
-			h.SourceIP.String(),
+			h.SrcIP.String(),
 			h.DestIP.String(),
-			h.SourcePort,
+			h.SrcPort,
 			h.DestPort,
 		)
 	}

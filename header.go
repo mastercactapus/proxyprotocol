@@ -8,8 +8,8 @@ import (
 // Header provides information decoded from a PROXY header.
 type Header interface {
 	Version() int
-	Source() net.Addr
-	Dest() net.Addr
+	SrcAddr() net.Addr
+	DestAddr() net.Addr
 
 	WriteTo(io.Writer) (int64, error)
 }
