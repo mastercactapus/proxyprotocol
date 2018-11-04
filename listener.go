@@ -18,9 +18,9 @@ type Listener struct {
 }
 
 // NewListener will wrap nl, automatically handling PROXY headers for all connections.
-// To only require PROXY headers from certain connections, use SetFilter.
+// To expect PROXY headers only from certain addresses/subnets, use SetFilter.
 //
-// By default, all connections must provide a PROXY header within the provided timeout.
+// By default, all connections must provide a PROXY header within the specified timeout.
 func NewListener(nl net.Listener, t time.Duration) *Listener {
 	l := &Listener{
 		Listener: nl,
@@ -88,11 +88,10 @@ func (l *Listener) Filter() []Rule {
 	return f
 }
 
-// SetFilter allows limiting PROXY header parsing to matching Subnets with an optional timeout.
-// If filter is nil, all connections will be required to provide a PROXY header.
+// SetFilter allows limiting PROXY header requirements to matching Subnets with an optional timeout.
+// If filter is nil, all connections will be required to provide a PROXY header (the default).
 //
-// Connections not matching any rule will be returned from Accept from the underlying listener
-// directly without reading a PROXY header.
+// Connections not matching any rule will be returned directly without reading a PROXY header.
 //
 // Duplicate subnet rules will automatically be removed and the lowest non-zero timeout will be used.
 //
