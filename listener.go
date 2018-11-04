@@ -36,6 +36,16 @@ func (l *Listener) Accept() (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	l.mx.RLock()
+	filter := l.filter
+	t := l.t
+	l.mx.RUnlock()
+
+	if len(filter) == 0 {
+		return NewConn(c, time.Now().Add(t)), nil
+	}
+
 	var remoteIP net.IP
 	switch r := c.RemoteAddr().(type) {
 	case *net.TCPAddr:
@@ -46,14 +56,6 @@ func (l *Listener) Accept() (net.Conn, error) {
 		return c, nil
 	}
 
-	l.mx.RLock()
-	filter := l.filter
-	t := l.t
-	l.mx.RUnlock()
-
-	if len(filter) == 0 {
-		return NewConn(c, time.Now().Add(t)), nil
-	}
 	for _, n := range filter {
 		if n.Subnet.Contains(remoteIP) {
 			if n.Timeout == 0 {
