@@ -7,30 +7,6 @@ import (
 	"time"
 )
 
-type rules []Rule
-
-func (r rules) Swap(i, j int) {
-	r[i], r[j] = r[j], r[i]
-}
-func (r rules) Len() int { return len(r) }
-func (r rules) Less(i, j int) bool {
-	iOnes, iBits := r[i].Subnet.Mask.Size()
-	jOnes, jBits := r[j].Subnet.Mask.Size()
-	if iOnes != jOnes {
-		return iOnes > jOnes
-	}
-	if iBits != jBits {
-		return iBits > jBits
-	}
-	if r[i].Timeout != r[j].Timeout {
-		if r[j].Timeout == 0 {
-			return true
-		}
-		return r[i].Timeout < r[j].Timeout
-	}
-	return r[i].Timeout < r[j].Timeout
-}
-
 // Listener wraps a net.Listener automatically wrapping new connections with PROXY protocol support.
 type Listener struct {
 	net.Listener
@@ -124,7 +100,23 @@ func (l *Listener) Filter() []Rule {
 func (l *Listener) SetFilter(filter []Rule) {
 	newFilter := make([]Rule, len(filter))
 	copy(newFilter, filter)
-	sort.Sort(rules(newFilter))
+	sort.Slice(newFilter, func(i, j int) bool {
+		iOnes, iBits := newFilter[i].Subnet.Mask.Size()
+		jOnes, jBits := newFilter[j].Subnet.Mask.Size()
+		if iOnes != jOnes {
+			return iOnes > jOnes
+		}
+		if iBits != jBits {
+			return iBits > jBits
+		}
+		if newFilter[i].Timeout != newFilter[j].Timeout {
+			if newFilter[j].Timeout == 0 {
+				return true
+			}
+			return newFilter[i].Timeout < newFilter[j].Timeout
+		}
+		return newFilter[i].Timeout < newFilter[j].Timeout
+	})
 	if len(newFilter) > 0 {
 		// dedup
 		last := newFilter[0]
