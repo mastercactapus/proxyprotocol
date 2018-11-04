@@ -7,7 +7,7 @@ import (
 
 var (
 	sigV1 = []byte("PROXY %s %s %s %d %d\r\n")
-	sigV2 = []byte("\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A")
+	sigV2 = []byte{0x0D, 0x0A, 0x0D, 0x0A, 0x00, 0x0D, 0x0A, 0x51, 0x55, 0x49, 0x54, 0x0A}
 )
 
 // InvalidHeaderErr contains the parsing error as well as all data read from the reader.

@@ -20,7 +20,19 @@ func TestConn_ProxyHeader(t *testing.T) {
 
 			hdrOut, err := dstC.ProxyHeader()
 			assert.NoError(t, err)
-			assert.Equal(t, hdr, hdrOut)
+			assert.Equal(t, hdr.Version(), hdrOut.Version())
+			if hdr.Source() != nil {
+				assert.NotNil(t, hdrOut.Source())
+				assert.Equal(t, hdr.Source().String(), hdrOut.Source().String(), "SrcAddr")
+			} else {
+				assert.Nil(t, hdrOut.Source())
+			}
+			if hdr.Dest() != nil {
+				assert.NotNil(t, hdrOut.Dest())
+				assert.Equal(t, hdr.Dest().String(), hdrOut.Dest().String(), "DestAddr")
+			} else {
+				assert.Nil(t, hdrOut.Source())
+			}
 		})
 	}
 	check("V1-IPv4", &HeaderV1{
@@ -36,14 +48,36 @@ func TestConn_ProxyHeader(t *testing.T) {
 		DestIP:     net.ParseIP("2002:db8:85a3::8a2e:370:7334"),
 	})
 
-	check("V2", &HeaderV2{
+	check("V2-tcp4", &HeaderV2{
 		Command:    CommandProxy,
-		Family:     AddrFamilyInet,
-		Protocol:   ProtoStream,
 		SourceAddr: &net.TCPAddr{Port: 1234, IP: net.ParseIP("192.168.0.1")},
 		DestAddr:   &net.TCPAddr{Port: 5678, IP: net.ParseIP("192.168.0.2")},
 	})
-
+	check("V2-tcp6", &HeaderV2{
+		Command:    CommandProxy,
+		SourceAddr: &net.TCPAddr{Port: 1234, IP: net.ParseIP("2::3")},
+		DestAddr:   &net.TCPAddr{Port: 5678, IP: net.ParseIP("4::5")},
+	})
+	check("V2-udp4", &HeaderV2{
+		Command:    CommandProxy,
+		SourceAddr: &net.UDPAddr{Port: 1234, IP: net.ParseIP("192.168.0.1")},
+		DestAddr:   &net.UDPAddr{Port: 5678, IP: net.ParseIP("192.168.0.2")},
+	})
+	check("V2-udp6", &HeaderV2{
+		Command:    CommandProxy,
+		SourceAddr: &net.UDPAddr{Port: 1234, IP: net.ParseIP("2::3")},
+		DestAddr:   &net.UDPAddr{Port: 5678, IP: net.ParseIP("4::5")},
+	})
+	check("V2-unix", &HeaderV2{
+		Command:    CommandProxy,
+		SourceAddr: &net.UnixAddr{Net: "unix", Name: "foo"},
+		DestAddr:   &net.UnixAddr{Net: "unix", Name: "bar"},
+	})
+	check("V2-unixgram", &HeaderV2{
+		Command:    CommandProxy,
+		SourceAddr: &net.UnixAddr{Net: "unixgram", Name: "foo"},
+		DestAddr:   &net.UnixAddr{Net: "unixgram", Name: "bar"},
+	})
 }
 
 func TestNewConnV1(t *testing.T) {
