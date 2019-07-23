@@ -50,7 +50,24 @@ func parseV2(r *bufio.Reader) (*HeaderV2, error) {
 	}
 
 	// highest 4 indicate address family
-	if (rawHdr.FamProto >> 4) > 3 {
+	switch rawHdr.FamProto >> 4 {
+	case 0: // local
+		if rawHdr.Len != 0 {
+			return nil, &InvalidHeaderErr{Read: buf[:16], error: errors.New("invalid length")}
+		}
+	case 1: // ipv4
+		if rawHdr.Len != 12 {
+			return nil, &InvalidHeaderErr{Read: buf[:16], error: errors.New("invalid length")}
+		}
+	case 2: // ipv6
+		if rawHdr.Len != 36 {
+			return nil, &InvalidHeaderErr{Read: buf[:16], error: errors.New("invalid length")}
+		}
+	case 3: // unix
+		if rawHdr.Len != 216 {
+			return nil, &InvalidHeaderErr{Read: buf[:16], error: errors.New("invalid length")}
+		}
+	default:
 		return nil, &InvalidHeaderErr{Read: buf[:16], error: errors.New("invalid v2 address family")}
 	}
 
@@ -59,13 +76,7 @@ func parseV2(r *bufio.Reader) (*HeaderV2, error) {
 		return nil, &InvalidHeaderErr{Read: buf[:16], error: errors.New("invalid v2 transport protocol")}
 	}
 
-	if 16+int(rawHdr.Len) > len(buf) {
-		newBuf := make([]byte, 16+int(rawHdr.Len))
-		copy(newBuf, buf[:16])
-		buf = newBuf
-	} else {
-		buf = buf[:16+int(rawHdr.Len)]
-	}
+	buf = buf[:16+int(rawHdr.Len)]
 
 	n, err = io.ReadFull(r, buf[16:])
 	if err != nil {

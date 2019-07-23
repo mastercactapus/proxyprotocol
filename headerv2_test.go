@@ -33,7 +33,9 @@ func TestHeaderV2(t *testing.T) {
 				buf.Write(s.value)
 			}
 			hdr, err := Parse(bufio.NewReader(&buf))
-			assert.NoError(t, err)
+			if !assert.NoError(t, err) {
+				return
+			}
 			assert.IsType(t, &HeaderV2{}, hdr, "Header Type")
 			p := hdr.(*HeaderV2)
 			assert.Equal(t, h.Command, p.Command, "Command")
