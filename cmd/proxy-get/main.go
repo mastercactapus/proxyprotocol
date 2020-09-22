@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
 	"io"
@@ -90,14 +89,7 @@ func main() {
 					DestPort: d.Port,
 				}
 
-				buf := new(bytes.Buffer)
-				_, err = hdr.WriteTo(buf)
-				if err != nil {
-					c.Close()
-					return nil, fmt.Errorf("write v1 header: %w", err)
-				}
-
-				_, err = c.Write(buf.Bytes())
+				_, err = hdr.WriteTo(c)
 				if err != nil {
 					c.Close()
 					return nil, fmt.Errorf("write v1 header: %w", err)
@@ -123,14 +115,7 @@ func main() {
 					hdr.Command = proxyprotocol.CmdLocal
 				}
 
-				buf := new(bytes.Buffer)
-				_, err = hdr.WriteTo(buf)
-				if err != nil {
-					c.Close()
-					return nil, fmt.Errorf("write v2 header: %w", err)
-				}
-
-				_, err = c.Write(buf.Bytes())
+				_, err = hdr.WriteTo(c)
 				if err != nil {
 					c.Close()
 					return nil, fmt.Errorf("write v2 header: %w", err)

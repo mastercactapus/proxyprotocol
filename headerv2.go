@@ -195,7 +195,7 @@ func (h HeaderV2) WriteTo(w io.Writer) (int64, error) {
 		return sendEmpty()
 	}
 
-	addr := make([]byte, 216)
+	buf := newBuffer(16, 232)
 
 	setAddr := func(srcIP, dstIP net.IP, srcPort, dstPort int) (fam byte) {
 		src := srcIP.To4()
@@ -210,12 +210,12 @@ func (h HeaderV2) WriteTo(w io.Writer) (int64, error) {
 		if src == nil || dst == nil {
 			return 0 // UNSPEC
 		}
-		buf := bytes.NewBuffer(addr[:0])
+
 		buf.Write(src)
 		buf.Write(dst)
 		binary.Write(buf, binary.BigEndian, uint16(srcPort))
 		binary.Write(buf, binary.BigEndian, uint16(dstPort))
-		addr = buf.Bytes()
+
 		return fam
 	}
 
@@ -257,20 +257,19 @@ func (h HeaderV2) WriteTo(w io.Writer) (int64, error) {
 		default:
 			return sendEmpty()
 		}
-		copy(addr, src.Name)
-		copy(addr[108:], dst.Name)
+		buf.Write([]byte(src.Name))
+		buf.Seek(108 + 16)
+		buf.Write([]byte(dst.Name))
+		buf.Seek(232)
 	}
 
-	rawHdr.Len = uint16(len(addr))
+	rawHdr.Len = uint16(buf.Len() - 16)
 
-	err := binary.Write(w, binary.BigEndian, rawHdr)
+	buf.Seek(0)
+	err := binary.Write(buf, binary.BigEndian, rawHdr)
 	if err != nil {
 		return 0, err
 	}
 
-	n, err := w.Write(addr)
-	if err != nil {
-		return int64(16 + n), err
-	}
-	return int64(16 + n), err
+	return buf.WriteTo(w)
 }
