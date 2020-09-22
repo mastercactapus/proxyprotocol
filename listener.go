@@ -43,6 +43,9 @@ func (l *Listener) Accept() (net.Conn, error) {
 	l.mx.RUnlock()
 
 	if len(filter) == 0 {
+		if t == 0 {
+			return NewConn(c, time.Time{}), nil
+		}
 		return NewConn(c, time.Now().Add(t)), nil
 	}
 
