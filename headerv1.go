@@ -1,7 +1,6 @@
 package proxyprotocol
 
 import (
-	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -17,22 +16,20 @@ type HeaderV1 struct {
 	DestIP   net.IP
 }
 
-func parseV1(r *bufio.Reader) (*HeaderV1, error) {
-	buf := make([]byte, 0, 108)
-	last := byte(0)
+func parseV1(buf []byte, r io.Reader) (*HeaderV1, error) {
 	for {
-		b, err := r.ReadByte()
+		size := len(buf)
+		buf = buf[:size+1]
+		n, err := r.Read(buf[size:])
 		if err != nil {
-			return nil, &InvalidHeaderErr{Read: buf, error: err}
+			return nil, &InvalidHeaderErr{Read: buf[:size+n], error: err}
 		}
-		buf = append(buf, b)
-		if last == '\r' && b == '\n' {
+		if buf[size] == '\n' {
 			break
 		}
 		if len(buf) == 108 {
 			return nil, &InvalidHeaderErr{Read: buf, error: errors.New("header too long")}
 		}
-		last = b
 	}
 	if bytes.HasPrefix(buf, []byte("PROXY UNKNOWN")) {
 		// From the documentation:

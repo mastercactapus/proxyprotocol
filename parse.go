@@ -1,8 +1,8 @@
 package proxyprotocol
 
 import (
-	"bufio"
 	"errors"
+	"io"
 )
 
 var (
@@ -17,19 +17,21 @@ type InvalidHeaderErr struct {
 }
 
 // Parse will parse detect and return a V1 or V2 header, otherwise InvalidHeaderErr is returned.
-func Parse(r *bufio.Reader) (Header, error) {
-	b, err := r.ReadByte()
+func Parse(r io.Reader) (Header, error) {
+	buf := make([]byte, 12, 232)
+
+	// both header types are a min of 12 bytes
+	_, err := io.ReadFull(r, buf)
 	if err != nil {
 		return nil, err
 	}
-	r.UnreadByte()
 
-	switch b {
+	switch buf[0] {
 	case sigV1[0]:
-		return parseV1(r)
+		return parseV1(buf, r)
 	case sigV2[0]:
-		return parseV2(r)
+		return parseV2(buf, r)
 	}
 
-	return nil, &InvalidHeaderErr{error: errors.New("invalid signature")}
+	return nil, &InvalidHeaderErr{Read: buf, error: errors.New("invalid signature")}
 }

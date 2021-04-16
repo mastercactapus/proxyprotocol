@@ -1,7 +1,6 @@
 package proxyprotocol
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/binary"
 	"errors"
@@ -24,61 +23,61 @@ type rawV2 struct {
 	Len      uint16
 }
 
-func parseV2(r *bufio.Reader) (*HeaderV2, error) {
-	buf := make([]byte, 232)
-	n, err := io.ReadFull(r, buf[:16])
+func parseV2(buf []byte, r io.Reader) (*HeaderV2, error) {
+	buf = buf[:16]
+	_, err := io.ReadFull(r, buf[12:])
 	if err != nil {
-		return nil, &InvalidHeaderErr{Read: buf[:n], error: err}
+		return nil, &InvalidHeaderErr{Read: buf, error: err}
 	}
+
 	var rawHdr rawV2
 	err = binary.Read(bytes.NewReader(buf), binary.BigEndian, &rawHdr)
 	if err != nil {
-		return nil, &InvalidHeaderErr{Read: buf[:16], error: err}
+		return nil, &InvalidHeaderErr{Read: buf, error: err}
 	}
 	if !bytes.Equal(rawHdr.Sig[:], sigV2) {
-		return nil, &InvalidHeaderErr{Read: buf[:16], error: errors.New("invalid signature")}
+		return nil, &InvalidHeaderErr{Read: buf, error: errors.New("invalid signature")}
 	}
 	// highest 4 indicate version
 	if (rawHdr.VerCmd >> 4) != 2 {
-		return nil, &InvalidHeaderErr{Read: buf[:16], error: errors.New("invalid v2 version value")}
+		return nil, &InvalidHeaderErr{Read: buf, error: errors.New("invalid v2 version value")}
 	}
 	var h HeaderV2
 	// lowest 4 = command (0xf == 0b00001111)
 	h.Command = Cmd(rawHdr.VerCmd & 0xf)
 	if h.Command > CmdProxy {
-		return nil, &InvalidHeaderErr{Read: buf[:16], error: errors.New("invalid v2 command")}
+		return nil, &InvalidHeaderErr{Read: buf, error: errors.New("invalid v2 command")}
 	}
 
 	// highest 4 indicate address family
 	switch rawHdr.FamProto >> 4 {
 	case 0: // local
 		if rawHdr.Len != 0 {
-			return nil, &InvalidHeaderErr{Read: buf[:16], error: errors.New("invalid length")}
+			return nil, &InvalidHeaderErr{Read: buf, error: errors.New("invalid length")}
 		}
 	case 1: // ipv4
 		if rawHdr.Len != 12 {
-			return nil, &InvalidHeaderErr{Read: buf[:16], error: errors.New("invalid length")}
+			return nil, &InvalidHeaderErr{Read: buf, error: errors.New("invalid length")}
 		}
 	case 2: // ipv6
 		if rawHdr.Len != 36 {
-			return nil, &InvalidHeaderErr{Read: buf[:16], error: errors.New("invalid length")}
+			return nil, &InvalidHeaderErr{Read: buf, error: errors.New("invalid length")}
 		}
 	case 3: // unix
 		if rawHdr.Len != 216 {
-			return nil, &InvalidHeaderErr{Read: buf[:16], error: errors.New("invalid length")}
+			return nil, &InvalidHeaderErr{Read: buf, error: errors.New("invalid length")}
 		}
 	default:
-		return nil, &InvalidHeaderErr{Read: buf[:16], error: errors.New("invalid v2 address family")}
+		return nil, &InvalidHeaderErr{Read: buf, error: errors.New("invalid v2 address family")}
 	}
 
 	// lowest 4 = transport protocol (0xf == 0b00001111)
 	if (rawHdr.FamProto & 0xf) > 2 {
-		return nil, &InvalidHeaderErr{Read: buf[:16], error: errors.New("invalid v2 transport protocol")}
+		return nil, &InvalidHeaderErr{Read: buf, error: errors.New("invalid v2 transport protocol")}
 	}
 
-	buf = buf[:16+int(rawHdr.Len)]
-
-	n, err = io.ReadFull(r, buf[16:])
+	buf = buf[:16+rawHdr.Len]
+	n, err := io.ReadFull(r, buf[16:])
 	if err != nil {
 		return nil, &InvalidHeaderErr{Read: buf[:16+n], error: err}
 	}
