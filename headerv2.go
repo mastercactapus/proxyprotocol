@@ -24,8 +24,9 @@ type rawV2 struct {
 }
 
 func parseV2(buf []byte, r io.Reader) (*HeaderV2, error) {
+	n := len(buf)
 	buf = buf[:16]
-	_, err := io.ReadFull(r, buf[12:])
+	_, err := io.ReadFull(r, buf[n:])
 	if err != nil {
 		return nil, &InvalidHeaderErr{Read: buf, error: err}
 	}
@@ -77,7 +78,7 @@ func parseV2(buf []byte, r io.Reader) (*HeaderV2, error) {
 	}
 
 	buf = buf[:16+rawHdr.Len]
-	n, err := io.ReadFull(r, buf[16:])
+	n, err = io.ReadFull(r, buf[16:])
 	if err != nil {
 		return nil, &InvalidHeaderErr{Read: buf[:16+n], error: err}
 	}
