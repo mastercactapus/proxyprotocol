@@ -17,13 +17,23 @@ type HeaderV1 struct {
 }
 
 func parseV1(buf []byte, r io.Reader) (*HeaderV1, error) {
+	br, ok := r.(io.ByteReader)
 	for {
 		size := len(buf)
-		buf = buf[:size+1]
-		n, err := r.Read(buf[size:])
-		if err != nil {
-			return nil, &InvalidHeaderErr{Read: buf[:size+n], error: err}
+		if ok {
+			b, err := br.ReadByte()
+			if err != nil {
+				return nil, &InvalidHeaderErr{Read: buf, error: err}
+			}
+			buf = append(buf, b)
+		} else {
+			buf = buf[:size+1]
+			n, err := r.Read(buf[size:])
+			if err != nil {
+				return nil, &InvalidHeaderErr{Read: buf[:size+n], error: err}
+			}
 		}
+
 		if buf[size] == '\n' {
 			break
 		}
