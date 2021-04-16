@@ -18,19 +18,25 @@ type InvalidHeaderErr struct {
 
 // Parse will parse detect and return a V1 or V2 header, otherwise InvalidHeaderErr is returned.
 func Parse(r io.Reader) (Header, error) {
-	// both header types are a min of 15 bytes
-	buf := make([]byte, 15, 232)
-
-	n, err := io.ReadAtLeast(r, buf, 1)
+	buf := make([]byte, 1, 232)
+	var err error
+	if br, ok := r.(io.ByteReader); ok {
+		buf[0], err = br.ReadByte()
+	} else {
+		var n int
+		// both header types are a min of 15 bytes
+		n, err = io.ReadAtLeast(r, buf[:15], 1)
+		buf = buf[:n]
+	}
 	if err != nil {
 		return nil, err
 	}
 
 	switch buf[0] {
 	case sigV1[0]:
-		return parseV1(buf[:n], r)
+		return parseV1(buf, r)
 	case sigV2[0]:
-		return parseV2(buf[:n], r)
+		return parseV2(buf, r)
 	}
 
 	return nil, &InvalidHeaderErr{Read: buf, error: errors.New("invalid signature")}
