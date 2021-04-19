@@ -23,7 +23,7 @@ func parseHostPort(s string) (net.IP, int, error) {
 		return nil, 0, fmt.Errorf("invalid port '%s': %w", portStr, err)
 	}
 	if srcPort < 1 || srcPort > 65535 {
-		return nil, 0, fmt.Errorf("invalid port '%d': must be between 1-65535")
+		return nil, 0, fmt.Errorf("invalid port '%d': must be between 1-65535", srcPort)
 	}
 
 	srcIP := net.ParseIP(addr)
