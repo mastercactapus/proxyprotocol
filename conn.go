@@ -20,13 +20,40 @@ type Conn struct {
 	local, remote net.Addr
 }
 
+type wrappedConn struct {
+	net.Conn
+	hdr Header
+}
+
+func (w *wrappedConn) LocalAddr() net.Addr          { return w.hdr.DestAddr() }
+func (w *wrappedConn) RemoteAddr() net.Addr         { return w.hdr.SrcAddr() }
+func (w *wrappedConn) ProxyHeader() (Header, error) { return w.hdr, nil }
+
 // NewConn will wrap an existing net.Conn using `deadline` to receive the header.
+//
+// Deprecated: Use WrapConn instead.
 func NewConn(c net.Conn, deadline time.Time) *Conn {
 	return &Conn{
 		Conn:     c,
 		deadline: deadline,
 		r:        bufio.NewReader(c),
 	}
+}
+
+// WrapConn will return a new net.Conn with LocalAddr and RemoteAddr set to
+// the appropriate values from the PROXY protocol. The header is read and parsed
+// before returning (call SetReadDeadline on c before calling WrapConn if necessary).
+//
+// The original net.Conn is returned if there is an error.
+func WrapConn(c net.Conn) (net.Conn, error) {
+	hdr, err := Parse(c)
+	if err != nil {
+		return c, err
+	}
+	return &wrappedConn{
+		Conn: c,
+		hdr:  hdr,
+	}, nil
 }
 
 // ProxyHeader will return the PROXY header received on the current connection.
@@ -36,12 +63,11 @@ func (c *Conn) ProxyHeader() (Header, error) {
 }
 
 func (c *Conn) parse() {
-	// use earliest deadline
-	if c.nextDeadline.IsZero() || c.nextDeadline.Before(c.deadline) {
+	if !c.deadline.IsZero() && (c.nextDeadline.IsZero() || c.nextDeadline.After(c.deadline)) {
+		// deadline passed to NewConn and SetDeadline hasn't been called
+		// with a sooner time
 		c.Conn.SetReadDeadline(c.deadline)
 		defer c.Conn.SetReadDeadline(c.nextDeadline)
-	} else {
-		c.Conn.SetReadDeadline(c.nextDeadline)
 	}
 
 	c.hdr, c.err = Parse(c.r)
