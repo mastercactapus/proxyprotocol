@@ -2,6 +2,7 @@ package proxyprotocol
 
 import (
 	"bufio"
+	"io"
 	"net"
 	"sync"
 	"time"
@@ -21,6 +22,7 @@ type Conn struct {
 }
 
 type wrappedConn struct {
+	io.Reader
 	net.Conn
 	hdr Header
 }
@@ -28,6 +30,7 @@ type wrappedConn struct {
 func (w *wrappedConn) LocalAddr() net.Addr          { return w.hdr.DestAddr() }
 func (w *wrappedConn) RemoteAddr() net.Addr         { return w.hdr.SrcAddr() }
 func (w *wrappedConn) ProxyHeader() (Header, error) { return w.hdr, nil }
+func (w *wrappedConn) Read(p []byte) (int, error)   { return w.Reader.Read(p) }
 
 // NewConn will wrap an existing net.Conn using `deadline` to receive the header.
 //
@@ -46,13 +49,23 @@ func NewConn(c net.Conn, deadline time.Time) *Conn {
 //
 // The original net.Conn is returned if there is an error.
 func WrapConn(c net.Conn) (net.Conn, error) {
-	hdr, err := Parse(c)
+	return WrapConnReader(c, bufio.NewReader(c))
+}
+
+// WrapConnReader works just like WrapConn but allows the caller to specify
+// the Reader for the connection.
+//
+// For instance, to wrap a connection without creating the implicit *bufio.Reader
+// from WrapConn, call `WrapConnReader(c, c)`
+func WrapConnReader(c net.Conn, r io.Reader) (net.Conn, error) {
+	hdr, err := Parse(r)
 	if err != nil {
 		return c, err
 	}
 	return &wrappedConn{
-		Conn: c,
-		hdr:  hdr,
+		Reader: r,
+		Conn:   c,
+		hdr:    hdr,
 	}, nil
 }
 
