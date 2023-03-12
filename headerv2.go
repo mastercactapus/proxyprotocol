@@ -81,13 +81,13 @@ func parseV2(r *bufio.Reader) (*HeaderV2, error) {
 	}
 
 	// We may have TLV data after the address data, so we need to read more.
-	if int(rawHdr.Len) > len(buf)+16 {
-		newBuf := make([]byte, 16+rawHdr.Len)
+	if int(rawHdr.Len)+16 > len(buf) {
+		newBuf := make([]byte, int(rawHdr.Len)+16)
 		copy(newBuf, buf)
 		buf = newBuf
 	}
 
-	buf = buf[:16+int(rawHdr.Len)]
+	buf = buf[:int(rawHdr.Len)+16]
 
 	n, err = io.ReadFull(r, buf[16:])
 	if err != nil {

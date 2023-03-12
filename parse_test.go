@@ -11,6 +11,21 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func FuzzParse(f *testing.F) {
+	f.Add([]byte("PROXY TCP6 2001:db8:85a3::8a2e:370:7334 2002:db8:85a3::8a2e:370:7334 1234 5678\r\n"))
+	f.Add([]byte("PROXY TCP4 192.168.0.1 192.168.0.2 1234 5678\r\n"))
+	f.Add([]byte("PROXY UNKNOWN\r\n"))
+
+	f.Add(sample1)
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		_, err := Parse(bufio.NewReader(bytes.NewReader(data)))
+		if err != nil {
+			t.Skip(err)
+		}
+	})
+}
+
 func TestParse_Malformed(t *testing.T) {
 	data := []byte{
 		// PROXY protocol v2 magic header
