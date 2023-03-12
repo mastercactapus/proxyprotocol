@@ -10,12 +10,11 @@ import (
 
 func TestHeaderV1_WriteTo(t *testing.T) {
 	check := func(name string, hdr HeaderV1, exp string) {
-		t.Run(name, func(t *testing.T) {
-			buf := new(bytes.Buffer)
-			_, err := hdr.WriteTo(buf)
-			assert.NoError(t, err)
-			assert.Equal(t, exp, buf.String())
-		})
+		t.Helper()
+		buf := new(bytes.Buffer)
+		_, err := hdr.WriteTo(buf)
+		assert.NoError(t, err, name)
+		assert.Equal(t, exp, buf.String(), name)
 	}
 
 	check("blank", HeaderV1{}, "PROXY UNKNOWN\r\n")
@@ -43,5 +42,4 @@ func TestHeaderV1_WriteTo(t *testing.T) {
 	},
 		"PROXY TCP6 2001:db8:85a3::8a2e:370:7334 2002:db8:85a3::8a2e:370:7334 1234 5678\r\n",
 	)
-
 }

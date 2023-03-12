@@ -73,7 +73,11 @@ func parseV1(r *bufio.Reader) (*HeaderV1, error) {
 		if fam == "TCP4" {
 			return ip.To4() != nil
 		}
-		return ip.To4() == nil
+		if fam == "TCP6" {
+			return ip.To16() != nil
+		}
+
+		return false
 	}
 
 	srcIP := net.ParseIP(srcIPStr)
