@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -15,6 +16,7 @@ type HeaderV2 struct {
 	Command Cmd
 	Src     net.Addr
 	Dest    net.Addr
+	TLVs    []TLV
 }
 
 type rawV2 struct {
@@ -49,24 +51,26 @@ func parseV2(r *bufio.Reader) (*HeaderV2, error) {
 		return nil, &InvalidHeaderErr{Read: buf[:16], error: errors.New("invalid v2 command")}
 	}
 
+	var tlvStart int
 	// highest 4 indicate address family
 	switch rawHdr.FamProto >> 4 {
 	case 0: // local
-		if rawHdr.Len != 0 {
-			return nil, &InvalidHeaderErr{Read: buf[:16], error: errors.New("invalid length")}
-		}
+		tlvStart = 16
 	case 1: // ipv4
-		if rawHdr.Len != 12 {
+		if rawHdr.Len < 12 {
 			return nil, &InvalidHeaderErr{Read: buf[:16], error: errors.New("invalid length")}
 		}
+		tlvStart = 16 + 12
 	case 2: // ipv6
-		if rawHdr.Len != 36 {
+		if rawHdr.Len < 36 {
 			return nil, &InvalidHeaderErr{Read: buf[:16], error: errors.New("invalid length")}
 		}
+		tlvStart = 16 + 36
 	case 3: // unix
-		if rawHdr.Len != 216 {
+		if rawHdr.Len < 216 {
 			return nil, &InvalidHeaderErr{Read: buf[:16], error: errors.New("invalid length")}
 		}
+		tlvStart = 16 + 216
 	default:
 		return nil, &InvalidHeaderErr{Read: buf[:16], error: errors.New("invalid v2 address family")}
 	}
@@ -76,11 +80,24 @@ func parseV2(r *bufio.Reader) (*HeaderV2, error) {
 		return nil, &InvalidHeaderErr{Read: buf[:16], error: errors.New("invalid v2 transport protocol")}
 	}
 
+	// We may have TLV data after the address data, so we need to read more.
+	if int(rawHdr.Len) > len(buf)+16 {
+		newBuf := make([]byte, 16+rawHdr.Len)
+		copy(newBuf, buf)
+		buf = newBuf
+	}
+
 	buf = buf[:16+int(rawHdr.Len)]
 
 	n, err = io.ReadFull(r, buf[16:])
 	if err != nil {
 		return nil, &InvalidHeaderErr{Read: buf[:16+n], error: err}
+	}
+
+	// parse TLVs
+	h.TLVs, err = ParseTLVs(buf[tlvStart:])
+	if err != nil {
+		return nil, &InvalidHeaderErr{Read: buf, error: fmt.Errorf("parse TLVs: %w", err)}
 	}
 
 	if h.Command == CmdLocal {
@@ -261,6 +278,13 @@ func (h HeaderV2) WriteTo(w io.Writer) (int64, error) {
 		buf.Seek(108 + 16)
 		buf.Write([]byte(dst.Name))
 		buf.Seek(232)
+	}
+
+	for _, tlv := range h.TLVs {
+		_, err := tlv.WriteTo(buf)
+		if err != nil {
+			return 0, err
+		}
 	}
 
 	rawHdr.Len = uint16(buf.Len() - 16)
