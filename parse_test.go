@@ -55,6 +55,11 @@ func TestParse_HeaderV2(t *testing.T) {
 	s, ok := FindTLV(h, PP2TypeNOOP)
 	assert.True(t, ok)
 	assert.Equal(t, "hello, world!", string(s))
+
+	var buf bytes.Buffer
+	_, err = h.WriteTo(&buf)
+	assert.NoError(t, err)
+	assert.Equal(t, sample1, buf.Bytes())
 }
 
 func TestParse_HeaderV1(t *testing.T) {
