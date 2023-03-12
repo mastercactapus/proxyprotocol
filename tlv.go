@@ -47,10 +47,12 @@ func ParseTLVs(b []byte) ([]TLV, error) {
 		if len(b) < 3+len(value) {
 			return nil, io.ErrUnexpectedEOF
 		}
+		copy(value, b[3:])
 		res = append(res, TLV{
 			Type:  PP2Type(b[0]),
 			Value: value,
 		})
+		b = b[3+len(value):]
 	}
 
 	return res, nil

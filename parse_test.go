@@ -3,6 +3,7 @@ package proxyprotocol
 import (
 	"bufio"
 	"bytes"
+	_ "embed"
 	"net"
 	"strings"
 	"testing"
@@ -27,6 +28,18 @@ func TestParse_Malformed(t *testing.T) {
 		bufio.NewReader(
 			bytes.NewReader(data)))
 	assert.Error(t, err)
+}
+
+//go:embed header-v2-sample.bin
+var sample1 []byte
+
+func TestParse_HeaderV2(t *testing.T) {
+	h, err := Parse(bufio.NewReader(bytes.NewReader(sample1)))
+	assert.NoError(t, err)
+
+	s, ok := FindTLV(h, PP2TypeNOOP)
+	assert.True(t, ok)
+	assert.Equal(t, "hello, world!", string(s))
 }
 
 func TestParse_HeaderV1(t *testing.T) {
